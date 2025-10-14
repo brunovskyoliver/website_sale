@@ -111,6 +111,23 @@ label, .o_variant_pills {
     &.css_not_available {
         opacity: 0.6;
     }
+    
+    // For attribute selectors (pills) that should remain visible but disabled
+    &.css_not_available_selector {
+        opacity: 0.5;
+        pointer-events: auto; // Keep clickable for switching
+        cursor: pointer;
+        
+        // Add visual indication that it's disabled but clickable
+        &:hover {
+            opacity: 0.7;
+        }
+    }
+}
+
+// Hide attribute value list items completely (like CPU options)
+li.js_attribute_value.css_not_available_hidden {
+    display: none !important;
 }
 
 label.css_attribute_color.css_not_available {

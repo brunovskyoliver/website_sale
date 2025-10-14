@@ -74,6 +74,12 @@ var VariantMixin = {
             }
             this._onChangeCombination(ev, $parent, combinationData);
             this._checkExclusions($parent, combination, combinationData.parent_exclusions);
+            
+            // Auto-select first available option after platform change
+            if ($parent.data('platform-changed')) {
+                $parent.removeData('platform-changed');
+                this._autoSelectFirstAvailable($parent);
+            }
         });
     },
 
@@ -334,9 +340,14 @@ var VariantMixin = {
         }
         $parent
             .find('option, input, label, .o_variant_pills')
-            .removeClass('css_not_available')
+            .removeClass('css_not_available css_not_available_selector')
             .attr('title', function () { return $(this).data('value_name') || ''; })
             .data('excluded-by', '');
+            
+        // Also clean up list items that were hidden
+        $parent
+            .find('li.js_attribute_value')
+            .removeClass('css_not_available_hidden');
 
         // exclusion rules: array of ptav
         // for each of them, contains array with the other ptav they exclude
@@ -454,7 +465,20 @@ var VariantMixin = {
             .find('option[value=' + attributeValueId + '], input[value=' + attributeValueId + ']');
         $input.addClass('css_not_available');
         $input.closest('label').addClass('css_not_available');
-        $input.closest('.o_variant_pills').addClass('css_not_available');
+        
+        // Check if this is a pills-type attribute (like Platform: AMD/Intel)
+        var $variantPill = $input.closest('.o_variant_pills');
+        var $attributeContainer = $input.closest('[data-attribute_display_type]');
+        var attributeDisplayType = $attributeContainer.data('attribute_display_type');
+        
+        if (attributeDisplayType === 'pills' && $variantPill.length) {
+            // For pills (like Platform selectors), keep them visible but disabled
+            $variantPill.addClass('css_not_available_selector');
+        } else {
+            // For other types (like CPU radio buttons), hide the entire list item
+            $input.closest('li.js_attribute_value').addClass('css_not_available_hidden');
+            $variantPill.addClass('css_not_available');
+        }
 
         if (excludedBy && attributeNames) {
             var $target = $input.is('option') ? $input : $input.closest('label').add($input);
@@ -473,6 +497,43 @@ var VariantMixin = {
             $target.data('excluded-by', JSON.stringify(excludedByData));
         }
     },
+    
+    /**
+     * Auto-select the first available option in dependent attributes after platform change
+     * 
+     * @private
+     * @param {$.Element} $parent
+     */
+    _autoSelectFirstAvailable: function ($parent) {
+        var self = this;
+        // Find attributes that are not Platform/Architecture
+        $parent.find('[data-attribute_name]').each(function() {
+            var $attributeContainer = $(this);
+            var attributeName = $attributeContainer.data('attribute_name');
+            
+            // Skip platform attributes
+            if (attributeName === 'Platforma' || attributeName === 'Platform' || attributeName === 'Architecture') {
+                return;
+            }
+            
+            // Check if any option is currently selected
+            var hasSelection = $attributeContainer.find('input[type="radio"]:checked').length > 0;
+            
+            if (!hasSelection) {
+                // Find first available (non-disabled) option
+                var $firstAvailable = $attributeContainer.find('input[type="radio"]:not(.css_not_available)').first();
+                if ($firstAvailable.length > 0) {
+                    $firstAvailable.prop('checked', true);
+                    $firstAvailable.closest('.js_attribute_value').addClass('active');
+                    $firstAvailable.closest('.o_variant_pills').addClass('active');
+                    
+                    // Trigger the change event properly to update the combination
+                    $firstAvailable.trigger('change');
+                }
+            }
+        });
+    },
+    
     /**
      * @see onChangeVariant
      *
@@ -689,8 +750,30 @@ var VariantMixin = {
 
     _onChangePillsAttribute: function (ev) {
         const radio = ev.target.closest('.o_variant_pills').querySelector("input");
-        radio.click();  // Trigger onChangeVariant.
         var $parent = $(ev.target).closest('.js_product');
+        
+        // Check if this is a platform/architecture change
+        var $attributeContainer = $(ev.target).closest('[data-attribute_name]');
+        var attributeName = $attributeContainer.data('attribute_name');
+        
+        // Store flag for auto-selection after platform change
+        var isPlatformChange = (attributeName === 'Platforma' || attributeName === 'Platform' || attributeName === 'Architecture');
+        if (isPlatformChange) {
+            $parent.data('platform-changed', true);
+            
+            // Find all other attribute groups (like CPU) and deselect them
+            $parent.find('[data-attribute_name]:not([data-attribute_name="' + attributeName + '"])').each(function() {
+                var $otherAttribute = $(this);
+                // Deselect all radio buttons in other attributes
+                $otherAttribute.find('input[type="radio"]:checked').prop('checked', false);
+                // Remove active class from other attribute containers
+                $otherAttribute.find('.o_variant_pills.active').removeClass('active');
+                $otherAttribute.find('.js_attribute_value.active').removeClass('active');
+            });
+        }
+        
+        radio.click();  // Trigger onChangeVariant.
+        
         $parent.find('.o_variant_pills')
             .removeClass("active")
             .filter(':has(input:checked)')
