@@ -79,6 +79,28 @@ var VariantMixin = {
             if ($parent.data('platform-changed')) {
                 $parent.removeData('platform-changed');
                 this._autoSelectFirstAvailable($parent);
+                
+                // Update all pill input value indicators
+                $parent.find('.o_variant_pills').each(function() {
+                    var $pill = $(this);
+                    var $input = $pill.find('input');
+                    var $inputValue = $pill.find('.o_variant_pills_input_value');
+                    var $attributeContainer = $pill.closest('[data-attribute_name]');
+                    var attributeName = $attributeContainer.data('attribute_name');
+                    
+                    // For platform pills, always show text
+                    if (attributeName === 'Platforma' || attributeName === 'Platform' || attributeName === 'Architecture') {
+                        $inputValue.removeClass('d-none');
+                    } else {
+                        // For other pills, show only if selected and available
+                        if ($input.prop('checked') && !$pill.hasClass('css_not_available_selector')) {
+                            $inputValue.removeClass('d-none');
+                            $pill.addClass('active');
+                        } else {
+                            $inputValue.addClass('d-none');
+                        }
+                    }
+                });
             }
         });
     },
@@ -470,6 +492,13 @@ var VariantMixin = {
         var $variantPill = $input.closest('.o_variant_pills');
         var $attributeContainer = $input.closest('[data-attribute_display_type]');
         var attributeDisplayType = $attributeContainer.data('attribute_display_type');
+        var attributeName = $attributeContainer.data('attribute_name');
+        
+        // For platform pills, always show the text
+        if ($variantPill.length > 0 && (attributeName === 'Platforma' || attributeName === 'Platform' || attributeName === 'Architecture')) {
+            var $pillsInputValue = $variantPill.find('.o_variant_pills_input_value');
+            $pillsInputValue.removeClass('d-none');
+        }
         
         if (attributeDisplayType === 'pills' && $variantPill.length) {
             // For pills (like Platform selectors), keep them visible but disabled
@@ -525,7 +554,11 @@ var VariantMixin = {
                 if ($firstAvailable.length > 0) {
                     $firstAvailable.prop('checked', true);
                     $firstAvailable.closest('.js_attribute_value').addClass('active');
-                    $firstAvailable.closest('.o_variant_pills').addClass('active');
+                    var $pill = $firstAvailable.closest('.o_variant_pills');
+                    $pill.addClass('active');
+                    
+                    // Make the pills input value visible
+                    $pill.find('.o_variant_pills_input_value').removeClass('d-none');
                     
                     // Trigger the change event properly to update the combination
                     $firstAvailable.trigger('change');
@@ -769,11 +802,22 @@ var VariantMixin = {
                 // Remove active class from other attribute containers
                 $otherAttribute.find('.o_variant_pills.active').removeClass('active');
                 $otherAttribute.find('.js_attribute_value.active').removeClass('active');
+                
+                // For non-platform attributes, hide input value elements
+                if (!isPlatformChange) {
+                    $otherAttribute.find('.o_variant_pills_input_value').addClass('d-none');
+                }
             });
+        }
+        
+        // For platform pills, always show all text
+        if (isPlatformChange) {
+            $attributeContainer.find('.o_variant_pills_input_value').removeClass('d-none');
         }
         
         radio.click();  // Trigger onChangeVariant.
         
+        // Update active classes on pills
         $parent.find('.o_variant_pills')
             .removeClass("active")
             .filter(':has(input:checked)')
