@@ -72,35 +72,45 @@ var VariantMixin = {
             if (this._shouldIgnoreRpcResult()) {
                 return;
             }
+            
+            // First update combination info and check exclusions
             this._onChangeCombination(ev, $parent, combinationData);
             this._checkExclusions($parent, combination, combinationData.parent_exclusions);
             
-            // Auto-select first available option after platform change
+            // Then handle platform change and auto-selection
             if ($parent.data('platform-changed')) {
                 $parent.removeData('platform-changed');
-                this._autoSelectFirstAvailable($parent);
                 
-                // Update all pill input value indicators
-                $parent.find('.o_variant_pills').each(function() {
-                    var $pill = $(this);
-                    var $input = $pill.find('input');
-                    var $inputValue = $pill.find('.o_variant_pills_input_value');
-                    var $attributeContainer = $pill.closest('[data-attribute_name]');
+                // Find first available CPU option and select it
+                $parent.find('[data-attribute_name]').each(function() {
+                    var $attributeContainer = $(this);
                     var attributeName = $attributeContainer.data('attribute_name');
                     
-                    // For platform pills, always show text
+                    // Skip platform attributes
                     if (attributeName === 'Platforma' || attributeName === 'Platform' || attributeName === 'Architecture') {
-                        $inputValue.removeClass('d-none');
-                    } else {
-                        // For other pills, show only if selected and available
-                        if ($input.prop('checked') && !$pill.hasClass('css_not_available_selector')) {
-                            $inputValue.removeClass('d-none');
+                        return;
+                    }
+                    
+                    // Clear any existing selection first
+                    $attributeContainer.find('.o_variant_pills.active').removeClass('active');
+                    $attributeContainer.find('.js_attribute_value.active').removeClass('active');
+                    
+                    // Find first non-disabled option
+                    var $firstAvailable = $attributeContainer.find('input[type="radio"]:not(.css_not_available)').first();
+                    if ($firstAvailable.length > 0) {
+                        $firstAvailable.prop('checked', true);
+                        $firstAvailable.closest('.js_attribute_value').addClass('active');
+                        var $pill = $firstAvailable.closest('.o_variant_pills');
+                        if ($pill.length) {
                             $pill.addClass('active');
-                        } else {
-                            $inputValue.addClass('d-none');
+                            $pill.find('.o_variant_pills_input_value').removeClass('d-none');
                         }
+                        // Note: No need to trigger change here as the next update will handle it
                     }
                 });
+                
+                // Trigger one final update to sync everything
+                this.triggerVariantChange($parent);
             }
         });
     },
@@ -794,19 +804,11 @@ var VariantMixin = {
         if (isPlatformChange) {
             $parent.data('platform-changed', true);
             
-            // Find all other attribute groups (like CPU) and deselect them
+            // Find all other attribute groups (like CPU) and just deselect them
             $parent.find('[data-attribute_name]:not([data-attribute_name="' + attributeName + '"])').each(function() {
                 var $otherAttribute = $(this);
-                // Deselect all radio buttons in other attributes
+                // Just deselect - don't update UI yet
                 $otherAttribute.find('input[type="radio"]:checked').prop('checked', false);
-                // Remove active class from other attribute containers
-                $otherAttribute.find('.o_variant_pills.active').removeClass('active');
-                $otherAttribute.find('.js_attribute_value.active').removeClass('active');
-                
-                // For non-platform attributes, hide input value elements
-                if (!isPlatformChange) {
-                    $otherAttribute.find('.o_variant_pills_input_value').addClass('d-none');
-                }
             });
         }
         
@@ -815,13 +817,12 @@ var VariantMixin = {
             $attributeContainer.find('.o_variant_pills_input_value').removeClass('d-none');
         }
         
-        radio.click();  // Trigger onChangeVariant.
+        // Update active class on the clicked pill
+        var $clickedPill = $(ev.target).closest('.o_variant_pills');
+        $clickedPill.siblings('.o_variant_pills').removeClass('active');
+        $clickedPill.addClass('active');
         
-        // Update active classes on pills
-        $parent.find('.o_variant_pills')
-            .removeClass("active")
-            .filter(':has(input:checked)')
-            .addClass("active");
+        radio.click();  // Trigger onChangeVariant.
     },
 
     /**
